@@ -5,10 +5,13 @@ Function: int (*hello)() = 0xA0000000;
 <T>	<ADDRESS>	<NAME>	<TYPE>
 F	A0000000	hello	int hello();
 
-Pointer: int *hello = 0xA8000000;
+Data: int *hello = 0xA8000000;
 <T>	<ADDRESS>	<NAME>	<TYPE>
-P	A8000000	hello	int
+D	A8000000	hello	int
 
+Label
+<T>	<ADDRESS>	<NAME>
+L	A8000000	hello
 */
 import java.io.IOException;
 import java.io.File;
