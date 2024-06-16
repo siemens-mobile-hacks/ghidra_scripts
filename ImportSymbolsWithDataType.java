@@ -69,16 +69,17 @@ public class ImportSymbolsWithDataType extends GhidraScript {
 		Vector<ParsedItem> items = parseSymbolsList(file);
 		println("Parsed " + items.size() + " symbols!");
 
-		println("Remove all old symbols...");
-		for (ParsedItem item : items) {
-			for (Symbol symbol : symbolTable.getSymbols(item.address)) {
-				symbol.delete();
-			}
-		}
-
 		println("Importing new symbols...");
+		int transactionID = getCurrentProgram().startTransaction("Import User Symbols");
 		for (ParsedItem item : items) {
 			if (item.type.equals("F")) {
+				// Clear old symbols
+				for (Symbol symbol : symbolTable.getSymbols(item.address)) {
+					if (symbol.getSource() == SourceType.USER_DEFINED) {
+						symbol.delete();
+					}
+				}
+
 				// Set label for the address
 				symbolTable.createLabel(item.address, item.name, SourceType.USER_DEFINED);
 
@@ -96,15 +97,22 @@ public class ImportSymbolsWithDataType extends GhidraScript {
 					println("ApplyFunctionSignatureCmd failed on: " + item.name);
 				}
 			} else if (item.type.equals("D")) {
-				// Set label for the address
-				symbolTable.createLabel(item.address, item.name, SourceType.USER_DEFINED);
-
 				Address start = item.address;
 				Address end = item.address.add(item.dataType.getLength() - 1);
 				if (!isValidAddress(start) || !isValidAddress(end)) {
 					println("BAD ADDRESS: " + start.toString());
 					continue;
 				}
+
+				// Clear old symbols
+				for (Symbol symbol : symbolTable.getSymbols(item.address)) {
+					if (symbol.getSource() == SourceType.USER_DEFINED) {
+						symbol.delete();
+					}
+				}
+
+				// Set label for the address
+				symbolTable.createLabel(item.address, item.name, SourceType.USER_DEFINED);
 
 				// Clear old data
 				clearListing(new AddressSet(start, end));
@@ -116,6 +124,7 @@ public class ImportSymbolsWithDataType extends GhidraScript {
 				symbolTable.createLabel(item.address, item.name, SourceType.USER_DEFINED);
 			}
 		}
+		getCurrentProgram().endTransaction(transactionID, true);
 	}
 
 	protected Vector<ParsedItem> parseSymbolsList(File file) {
@@ -176,36 +185,6 @@ public class ImportSymbolsWithDataType extends GhidraScript {
 			// println("Can't parse `" + code + "`: " + e.toString());
 		}
 		return type;
-	}
-
-	private void renameFunction(Function function, String newName) throws DuplicateNameException, InvalidInputException {
-		if (function.getName() == newName)
-			return;
-
-		try {
-			function.setName(newName, SourceType.USER_DEFINED);
-		} catch (DuplicateNameException e) {
-			println("DUP: " + newName + " - already exists.");
-
-			SymbolTable symbolTable = currentProgram.getSymbolTable();
-			Symbol existingSymbol = symbolTable.getSymbol(newName, function.getEntryPoint(), null);
-
-			String tempName = newName + "_old";
-			existingSymbol.setName(tempName, SourceType.USER_DEFINED);
-			println("   -> old function renamed to: " + tempName);
-
-			function.setName(newName, SourceType.USER_DEFINED);
-		}
-	}
-
-	private Function findFunctionByName(String functionName) {
-		FunctionManager functionManager = currentProgram.getFunctionManager();
-		for (Function function : functionManager.getFunctions(true)) {
-			if (function.getName().equals(functionName)) {
-				return function;
-			}
-		}
-		return null;
 	}
 
 	private boolean isValidAddress(Address address) {
