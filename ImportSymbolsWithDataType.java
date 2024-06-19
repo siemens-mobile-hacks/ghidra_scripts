@@ -86,8 +86,8 @@ public class ImportSymbolsWithDataType extends GhidraScript {
 				// Find or create function
 				Function func = functionManager.getFunctionAt(item.address);
 				if (func == null) {
-					clearListing(item.address);
-					disassemble(item.address);
+					// clearListing(item.address);
+					// disassemble(item.address);
 					func = createFunction(item.address, item.name);
 				}
 
