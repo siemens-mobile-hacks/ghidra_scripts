@@ -7,6 +7,10 @@ Function: int (*hello)() = 0xA0000000;
 <T>	<ADDRESS>	<NAME>	<TYPE>
 F	A0000000	hello	int hello();
 
+Function name without changing its signature:
+<T>	<ADDRESS>	<NAME>
+F	A0000000	hello
+
 Data: int *hello = 0xA8000000;
 <T>	<ADDRESS>	<NAME>	<TYPE>
 D	A8000000	hello	int
@@ -93,10 +97,12 @@ public class ImportSymbolsWithDataType extends GhidraScript {
 					func = createFunction(item.address, item.name);
 				}
 
-				// Update function signature
-				ApplyFunctionSignatureCmd cmd = new ApplyFunctionSignatureCmd(item.address, (FunctionSignature) item.dataType, SourceType.USER_DEFINED);
-				if (!cmd.applyTo(currentProgram, monitor)) {
-					println("ApplyFunctionSignatureCmd failed on: " + item.name);
+				if (item.dataType != null) {
+					// Update function signature
+					ApplyFunctionSignatureCmd cmd = new ApplyFunctionSignatureCmd(item.address, (FunctionSignature) item.dataType, SourceType.USER_DEFINED);
+					if (!cmd.applyTo(currentProgram, monitor)) {
+						println("ApplyFunctionSignatureCmd failed on: " + item.name);
+					}
 				}
 			} else if (item.type.equals("D")) {
 				Address start = item.address;
@@ -147,6 +153,10 @@ public class ImportSymbolsWithDataType extends GhidraScript {
 				symbol.type = tokens[0];
 
 				if (tokens[0].equals("F")) { // Function
+					if (tokens.length < 4 || tokens[3].isBlank()) {
+						symbols.add(symbol);
+						continue;
+					}
 					String code = tokens[3] + ";";
 					DataType functionSignature = parseDataType(code);
 					if (functionSignature == null) {
