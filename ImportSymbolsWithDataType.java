@@ -1,3 +1,5 @@
+// @category Siepatch
+
 /**
 Symbols file format:
 
