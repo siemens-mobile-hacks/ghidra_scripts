@@ -39,6 +39,7 @@ import ghidra.program.model.symbol.SourceType;
 import ghidra.program.model.symbol.Symbol;
 import ghidra.program.model.symbol.SymbolIterator;
 import ghidra.program.model.symbol.SymbolType;
+import ghidra.program.model.symbol.SymbolUtilities;
 import ghidra.util.exception.CancelledException;
 
 public class ExportSymbolsWithDataType extends GhidraScript {
@@ -284,7 +285,7 @@ public class ExportSymbolsWithDataType extends GhidraScript {
 				Function function = functions.next();
 				Address entry = function.getEntryPoint();
 				if (!addresses.contains(entry) ||
-					(!withAutomaticallyGeneratedSymbols && !isExplicit(function.getSymbol()))) {
+					(!withAutomaticallyGeneratedSymbols && !isExplicitFunction(function))) {
 					continue;
 				}
 
@@ -308,6 +309,17 @@ public class ExportSymbolsWithDataType extends GhidraScript {
 			}
 		}
 		return items;
+	}
+
+	private boolean isExplicitFunction(Function function) {
+		if (!isExplicit(function.getSymbol())) {
+			return false;
+		}
+		// Old or imported databases can retain an explicit source on a standard
+		// Ghidra function name.  The option promises to exclude FUN_<address>, so
+		// do not rely on SourceType alone.
+		String defaultName = SymbolUtilities.getDefaultFunctionName(function.getEntryPoint());
+		return !defaultName.equals(function.getName());
 	}
 
 	private boolean isExplicit(Symbol symbol) {
