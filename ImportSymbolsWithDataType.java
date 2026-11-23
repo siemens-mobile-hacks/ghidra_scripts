@@ -70,8 +70,8 @@ public class ImportSymbolsWithDataType extends GhidraScript {
 		SymbolTable symbolTable = currentProgram.getSymbolTable();
 		Listing listing = currentProgram.getListing();
 
-		File file = askFile("Please select symbols file, for e.g. symbols.txt", "Apply");
-		// File file = new File("/tmp/symbols.txt");
+		String[] args = getScriptArgs();
+		File file = args.length > 0 ? new File(args[0]) : askFile("Please select symbols file, for e.g. symbols.txt", "Apply");
 		Vector<ParsedItem> items = parseSymbolsList(file);
 		println("Parsed " + items.size() + " symbols!");
 
