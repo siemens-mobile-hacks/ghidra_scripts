@@ -8,8 +8,8 @@ In the GUI the script sets up the open program or asks for a fullflash .bin, imp
 The script then:
 - makes the flash read-only and marks FFS/EEPROM partitions as non-executable blocks;
 - creates the IO block at F0000000;
-- imports memory dumps named NAME_START_SIZE.bin or NAME_START_END.bin (hex), for example EL71v45_RAM_A8000000_01000000.bin,
-  given as files or directories;
+- imports memory dumps named NAME_START_SIZE.bin or NAME_START_END.bin (hex), for example EL71v45_RAM_A8000000_01000000.bin
+  or EL71v45-RAM-A8000000_01000000.bin from sie-tool, given as files or directories;
 - applies the analysis options;
 - imports swilib types, CPU registers and firmware symbols, downloading from devtools.siepatch.dev the files not given;
 - runs auto-analysis and a one-shot "Create Address Tables".
@@ -84,7 +84,7 @@ public class SetupSiemensFullflash extends GhidraScript {
 	private static final long X65_BLOCK_SIZE = 0x20000;
 	private static final long X85_BLOCK_SIZE = 0x40000;
 	private static final double MIN_PROLOGUE_RATIO = 0.5;
-	private static final Pattern DUMP_NAME = Pattern.compile("(?:.*_)?([A-Za-z0-9]+)_([0-9A-Fa-f]{8})_([0-9A-Fa-f]{8})\\.bin");
+	private static final Pattern DUMP_NAME = Pattern.compile("(?:.*[_-])?([A-Za-z0-9]+)[_-]([0-9A-Fa-f]{8})_([0-9A-Fa-f]{8})\\.bin");
 	private static final Pattern JSON_OBJECT = Pattern.compile("\\{[^{}]*\\}");
 	private static final Pattern JSON_FIELD = Pattern.compile("\"(\\w+)\"\\s*:\\s*\"?([^\",}]*)");
 	private static final List<String> PLATFORMS = List.of("ELKA", "NSG", "X75", "SG");
