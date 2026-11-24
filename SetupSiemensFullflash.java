@@ -297,11 +297,22 @@ public class SetupSiemensFullflash extends GhidraScript {
 			setupProgram();
 		} finally {
 			program.endTransaction(transaction, true);
-			program.save("Setup Siemens fullflash", monitor);
-			program.release(this);
-			currentProgram = scriptProgram;
-			getState().setCurrentProgram(scriptProgram);
+			try {
+				saveWhenIdle(program);
+			} finally {
+				program.release(this);
+				currentProgram = scriptProgram;
+				getState().setCurrentProgram(scriptProgram);
+			}
 		}
+	}
+
+	private void saveWhenIdle(Program program) throws Exception {
+		while (program.getCurrentTransactionInfo() != null) {
+			monitor.checkCancelled();
+			Thread.sleep(100);
+		}
+		program.save("Setup Siemens fullflash", monitor);
 	}
 
 	private boolean isInteractive() {
