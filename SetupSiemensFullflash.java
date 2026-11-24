@@ -382,7 +382,7 @@ public class SetupSiemensFullflash extends GhidraScript {
 		if (isInteractive()) {
 			askOptions(options, devices);
 		}
-		if (!PLATFORMS.contains(options.platform)) {
+		if (options.platform == null || !PLATFORMS.contains(options.platform)) {
 			throw new IllegalArgumentException("Platform is unknown: choose it in the dialog or pass platform=" + String.join("|", PLATFORMS));
 		}
 		println("Swilib target: " + options.target + ", platform: " + options.platform);
