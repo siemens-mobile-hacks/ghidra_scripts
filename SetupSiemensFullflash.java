@@ -6,7 +6,7 @@ Prepares a Siemens fullflash for analysis, following https://siepatch.dev/docs/r
 Run it on a fullflash imported as Raw Binary, ARM v5t 32 little, base address A0000000, without auto-analysis.
 In the GUI the script sets up the open program or asks for a fullflash .bin, imports it that way and opens it.
 The script then:
-- makes the flash read-only and marks FFS/EEPROM partitions as non-executable blocks;
+- makes the flash read-only;
 - creates the IO block at F0000000;
 - imports memory dumps named NAME_START_SIZE.bin or NAME_START_END.bin (hex), for example EL71v45_RAM_A8000000_01000000.bin
   or EL71v45-RAM-A8000000_01000000.bin from sie-tool, given as files or directories;
@@ -66,8 +66,9 @@ import ghidra.app.util.opinion.BinaryLoader;
 import ghidra.app.util.opinion.LoadResults;
 import ghidra.program.model.address.Address;
 import ghidra.program.model.data.DataTypeManager;
+import ghidra.program.model.listing.Listing;
 import ghidra.program.model.listing.Program;
-import ghidra.program.model.mem.Memory;
+import ghidra.program.model.listing.ProgramFragment;
 import ghidra.program.model.mem.MemoryBlock;
 import ghidra.util.exception.CancelledException;
 
@@ -78,11 +79,6 @@ public class SetupSiemensFullflash extends GhidraScript {
 	private static final long IO_SIZE = 0x0F000000L;
 	private static final long RAM_BASE = 0xA8000000L;
 	private static final long[] VENDOR_OFFSETS = { 0x8FC80, 0x220, 0x880, 0xC80 };
-	private static final long PARTITION_STEP = 0x10000;
-	private static final int X65_HEADER_SIZE = 16;
-	private static final int X85_HEADER_SIZE = 32;
-	private static final long X65_BLOCK_SIZE = 0x20000;
-	private static final long X85_BLOCK_SIZE = 0x40000;
 	private static final double MIN_PROLOGUE_RATIO = 0.5;
 	private static final Pattern DUMP_NAME = Pattern.compile("(?:.*[_-])?([A-Za-z0-9]+)[_-]([0-9A-Fa-f]{8})_([0-9A-Fa-f]{8})\\.bin");
 	private static final Pattern JSON_OBJECT = Pattern.compile("\\{[^{}]*\\}");
@@ -104,7 +100,6 @@ public class SetupSiemensFullflash extends GhidraScript {
 	);
 
 	private record Device(String target, String model, String platform) {}
-	private record Region(String name, long start, long end) {}
 
 	private static class Options {
 		String target;
@@ -363,6 +358,7 @@ public class SetupSiemensFullflash extends GhidraScript {
 		setupFlash(flash);
 		createIoBlock();
 		importDumps(options.dumps);
+		renameTreeFragments();
 		setAnalysisOptions(currentProgram, ANALYSIS_OPTIONS);
 
 		importTypes(options.types != null ? options.types.toPath() : downloadTypes(options.platform));
@@ -386,82 +382,17 @@ public class SetupSiemensFullflash extends GhidraScript {
 		flash.setName("FULLFLASH");
 		flash.setPermissions(true, false, true);
 		flash.setVolatile(false);
-
-		for (Region partition : findPartitions()) {
-			println(String.format("Partition %s: %08X-%08X", partition.name(), partition.start(), partition.end() - 1));
-			carveBlock(partition);
-		}
 	}
 
-	private List<Region> findPartitions() throws Exception {
-		List<Region> partitions = new ArrayList<>();
-		for (long offset = 0; offset + PARTITION_STEP <= m_flashSize; offset += PARTITION_STEP) {
-			String tag = readPartitionTag(offset, X65_HEADER_SIZE);
-			if (tag != null) {
-				addPartitionBlock(partitions, tag, offset, offset + X65_BLOCK_SIZE);
-			}
-
-			tag = readPartitionTag(offset + PARTITION_STEP - X85_HEADER_SIZE, X85_HEADER_SIZE);
-			if (tag != null) {
-				long end = offset + PARTITION_STEP;
-				addPartitionBlock(partitions, tag, Math.max(0, end - X85_BLOCK_SIZE), end);
+	private void renameTreeFragments() throws Exception {
+		Listing listing = currentProgram.getListing();
+		String tree = listing.getDefaultRootModule().getTreeName();
+		for (MemoryBlock block : currentProgram.getMemory().getBlocks()) {
+			ProgramFragment fragment = listing.getFragment(tree, block.getStart());
+			if (fragment != null && !fragment.getName().equals(block.getName())) {
+				fragment.setName(block.getName());
 			}
 		}
-		return partitions;
-	}
-
-	private void addPartitionBlock(List<Region> partitions, String tag, long start, long end) {
-		long blockStart = FLASH_BASE + start;
-		long blockEnd = FLASH_BASE + Math.min(end, m_flashSize);
-		if (!partitions.isEmpty()) {
-			Region last = partitions.get(partitions.size() - 1);
-			if (last.name().equals(tag) && last.end() == blockStart) {
-				partitions.set(partitions.size() - 1, new Region(tag, last.start(), blockEnd));
-				return;
-			}
-		}
-		partitions.add(new Region(tag, blockStart, blockEnd));
-	}
-
-	private String readPartitionTag(long offset, int headerSize) throws Exception {
-		byte[] header = getBytes(toAddr(FLASH_BASE + offset), headerSize);
-		int length = 0;
-		while (length < 9 && header[length] != 0) {
-			length++;
-		}
-		String tag = new String(header, 0, length);
-		if (length == 9 || !tag.matches("[A-Z][A-Z0-9_]+")) {
-			return null;
-		}
-
-		if (header[10] != 0 || header[11] != 0 || header[12] != (byte) 0xF0) {
-			return null;
-		}
-		for (int index = 13; index < headerSize; index++) {
-			if (header[index] != (byte) 0xFF) {
-				return null;
-			}
-		}
-		return tag;
-	}
-
-	private void carveBlock(Region region) throws Exception {
-		Memory memory = currentProgram.getMemory();
-		Address start = toAddr(region.start());
-		Address end = toAddr(region.end());
-
-		MemoryBlock block = memory.getBlock(start);
-		if (!block.getStart().equals(start)) {
-			memory.split(block, start);
-			block = memory.getBlock(start);
-		}
-		if (block.getEnd().compareTo(end) >= 0) {
-			memory.split(block, end);
-			memory.getBlock(end).setName("FULLFLASH");
-			block = memory.getBlock(start);
-		}
-		block.setName(region.name());
-		block.setPermissions(true, false, false);
 	}
 
 	private void createIoBlock() throws Exception {
