@@ -4,7 +4,8 @@
 Prepares a Siemens fullflash for analysis, following https://siepatch.dev/docs/reverse-engineering/how-start
 
 Run it on a fullflash imported as Raw Binary, ARM v5t 32 little, base address A0000000, without auto-analysis.
-In the GUI the script sets up the open program or asks for a fullflash .bin, imports it that way and opens it.
+In the GUI the script sets up the open program or asks for a fullflash .bin, imports it that way and opens it;
+the fullflash=FILE argument imports and opens a fullflash without asking.
 The script then:
 - makes the flash read-only;
 - creates the IO block at F0000000;
@@ -19,7 +20,7 @@ In the GUI a dialog shows the detected values and lets you override them and cho
 With script arguments (headless, Ghidra MCP) the script asks nothing; pass overrides as arguments:
 	analyzeHeadless PROJECT_DIR PROJECT -import fullflash.bin -loader BinaryLoader \
 		-loader-baseAddr 0xA0000000 -loader-blockName FULLFLASH -processor ARM:LE:32:v5t -noanalysis \
-		-scriptPath ghidra_scripts -postScript SetupSiemensFullflash.java [dumps=FILE_OR_DIR[:...]] [target=EL71v45|none] \
+		-scriptPath ghidra_scripts -postScript SetupSiemensFullflash.java [fullflash=FILE] [dumps=FILE_OR_DIR[:...]] [target=EL71v45|none] \
 		[platform=ELKA|NSG|X75|SG] [types=swilib-types.h] [cpu=cpu.txt] [symbols=symbols.txt] [analyze=false]
 */
 import java.awt.BorderLayout;
@@ -59,17 +60,22 @@ import docking.widgets.filechooser.GhidraFileChooser;
 import docking.widgets.filechooser.GhidraFileChooserMode;
 import ghidra.app.plugin.core.analysis.AutoAnalysisManager;
 import ghidra.app.script.GhidraScript;
+import ghidra.app.services.ProgramManager;
 import ghidra.app.util.cparser.C.CParserUtils;
 import ghidra.app.util.cparser.C.CParserUtils.CParseResults;
 import ghidra.app.util.importer.ProgramLoader;
 import ghidra.app.util.opinion.BinaryLoader;
 import ghidra.app.util.opinion.LoadResults;
+import ghidra.framework.model.Project;
+import ghidra.framework.plugintool.PluginTool;
 import ghidra.program.model.address.Address;
 import ghidra.program.model.data.DataTypeManager;
 import ghidra.program.model.listing.Listing;
 import ghidra.program.model.listing.Program;
 import ghidra.program.model.listing.ProgramFragment;
 import ghidra.program.model.mem.MemoryBlock;
+import ghidra.program.util.GhidraProgramUtilities;
+import ghidra.util.Swing;
 import ghidra.util.exception.CancelledException;
 
 public class SetupSiemensFullflash extends GhidraScript {
@@ -272,16 +278,14 @@ public class SetupSiemensFullflash extends GhidraScript {
 	}
 
 	private void setupFullflash() throws Exception {
-		if (!isInteractive()) {
-			if (currentProgram == null) {
-				throw new IllegalStateException("Open or import the fullflash first");
-			}
-			setupProgram();
-			return;
+		File file = getFileArg("fullflash");
+		if (file == null && isInteractive()) {
+			file = askFullflashFile();
 		}
-
-		File file = askFullflashFile();
 		if (file == null) {
+			if (currentProgram == null) {
+				throw new IllegalStateException("Open a fullflash or pass fullflash=FILE");
+			}
 			setupProgram();
 			return;
 		}
@@ -329,11 +333,28 @@ public class SetupSiemensFullflash extends GhidraScript {
 		) {
 			results.save(monitor);
 			Program program = results.getPrimaryDomainObject(this);
-			openProgram(program);
+			if (!isRunningHeadless()) {
+				showInCodeBrowser(program);
+			}
 			currentProgram = program;
 			getState().setCurrentProgram(program);
 			return program;
 		}
+	}
+
+	private void showInCodeBrowser(Program program) {
+		GhidraProgramUtilities.markProgramNotToAskToAnalyze(program);
+		Project project = getState().getProject();
+		PluginTool tool = Arrays.stream(project.getToolManager().getRunningTools())
+			.filter(running -> running.getService(ProgramManager.class) != null)
+			.findFirst()
+			.orElse(null);
+		if (tool == null) {
+			Swing.runNow(() -> project.getToolServices().launchDefaultTool(List.of(program.getDomainFile())));
+			return;
+		}
+		ProgramManager programManager = tool.getService(ProgramManager.class);
+		Swing.runNow(() -> programManager.openProgram(program));
 	}
 
 	private void setupProgram() throws Exception {
@@ -359,6 +380,7 @@ public class SetupSiemensFullflash extends GhidraScript {
 		createIoBlock();
 		importDumps(options.dumps);
 		renameTreeFragments();
+		AutoAnalysisManager.getAnalysisManager(currentProgram).registerAnalyzerOptions();
 		setAnalysisOptions(currentProgram, ANALYSIS_OPTIONS);
 
 		importTypes(options.types != null ? options.types.toPath() : downloadTypes(options.platform));
