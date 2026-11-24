@@ -16,7 +16,7 @@ The script then:
 
 The swilib target and platform are detected from the firmware model; CPU registers follow the target model.
 In the GUI a dialog shows the detected values and lets you override them and choose local files.
-Headless, pass overrides as script arguments:
+With script arguments (headless, Ghidra MCP) the script asks nothing; pass overrides as arguments:
 	analyzeHeadless PROJECT_DIR PROJECT -import fullflash.bin -loader BinaryLoader \
 		-loader-baseAddr 0xA0000000 -loader-blockName FULLFLASH -processor ARM:LE:32:v5t -noanalysis \
 		-scriptPath ghidra_scripts -postScript SetupSiemensFullflash.java [dumps=FILE_OR_DIR[:...]] [target=EL71v45|none] \
@@ -277,9 +277,9 @@ public class SetupSiemensFullflash extends GhidraScript {
 	}
 
 	private void setupFullflash() throws Exception {
-		if (isRunningHeadless()) {
+		if (!isInteractive()) {
 			if (currentProgram == null) {
-				throw new IllegalStateException("Import the fullflash with -import");
+				throw new IllegalStateException("Open or import the fullflash first");
 			}
 			setupProgram();
 			return;
@@ -303,6 +303,10 @@ public class SetupSiemensFullflash extends GhidraScript {
 			currentProgram = scriptProgram;
 			getState().setCurrentProgram(scriptProgram);
 		}
+	}
+
+	private boolean isInteractive() {
+		return !isRunningHeadless() && m_args.isEmpty();
 	}
 
 	private File askFullflashFile() throws Exception {
@@ -348,7 +352,7 @@ public class SetupSiemensFullflash extends GhidraScript {
 
 		List<Device> devices = fetchDevices();
 		Options options = detectOptions(devices);
-		if (!isRunningHeadless()) {
+		if (isInteractive()) {
 			askOptions(options, devices);
 		}
 		if (!PLATFORMS.contains(options.platform)) {
